@@ -237,11 +237,17 @@ try {
 }
 catch {
     Write-Error $_.Exception.Message
+    if (-not $Quiet) {
+        Write-Host "`nPremi un tasto per chiudere..." -ForegroundColor DarkGray
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    }
     exit 2
 }
 
 if (-not $Quiet) {
     Show-RebootStatus -Status $status -ShowPendingFiles:$ShowPendingFiles
+    Write-Host "Premi un tasto per chiudere..." -ForegroundColor DarkGray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 }
 
 # Output oggetto per pipeline
