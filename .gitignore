@@ -1,0 +1,143 @@
+# ============================================================
+# .gitignore per repository scripts
+# ATTENZIONE: protezione contro pubblicazione accidentale di segreti
+# ============================================================
+
+# ===================
+# CREDENZIALI E SEGRETI
+# ===================
+
+# File di ambiente con variabili sensibili
+.env
+.env.*
+*.env
+.envrc
+
+# File di credenziali generici
+*credentials*
+*credential*
+*password*
+*passwords*
+*secret*
+*secrets*
+*.secret
+*.secrets
+
+# Token e API keys
+*token*
+*apikey*
+*api_key*
+*api-key*
+
+# File di configurazione con potenziali segreti
+config.local.*
+*.local.json
+*.local.yaml
+*.local.yml
+*.local.xml
+*.local.ini
+*.private.*
+
+# ===================
+# CHIAVI E CERTIFICATI
+# ===================
+
+# Chiavi SSH
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_dsa
+id_dsa.*
+*.pem
+*.key
+*.ppk
+
+# Certificati
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+
+# GPG
+*.gpg
+*.asc
+secring.*
+
+# ===================
+# FILE WINDOWS
+# ===================
+Thumbs.db
+Desktop.ini
+*.lnk
+ehthumbs.db
+
+# ===================
+# FILE TEMPORANEI E LOG
+# ===================
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.log
+*.logs
+
+# ===================
+# CARTELLE PRIVATE
+# ===================
+_private/
+_drafts/
+_test/
+_local/
+.private/
+
+# ===================
+# EDITOR E IDE
+# ===================
+.vscode/
+*.code-workspace
+.idea/
+*.sublime-*
+.vs/
+
+# ===================
+# OUTPUT E BUILD
+# ===================
+output/
+out/
+bin/
+obj/
+
+# ===================
+# POWERSHELL SPECIFICI
+# ===================
+
+# Transcript e log di sessione
+*-transcript.txt
+*_transcript.txt
+
+# Export di credenziali PowerShell
+*.clixml
+*.xml.credential
+
+# SecureString export
+*.securestring
+
+# ===================
+# LINUX/BASH SPECIFICI
+# ===================
+
+# History files
+.bash_history
+.zsh_history
+.*_history
+
+# ===================
+# NOTE IMPORTANTI
+# ===================
+# Se devi includere un file che corrisponde a questi pattern,
+# usa: git add -f <filename>
+# Ma VERIFICA SEMPRE che non contenga segreti!
