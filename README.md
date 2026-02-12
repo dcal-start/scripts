@@ -6,7 +6,7 @@ Script operativi per amministrazione sistemi - Soiware S.n.c.
 
 ### Windows
 - [Get-PendingReboot.ps1](windows/Get-PendingReboot.ps1) - Verifica se un server Windows richiede riavvio
-- [ll.ps1](windows/ll.ps1) - Alias `ll` per PowerShell (equivalente di `ls -la` Linux, con flag `-s`, `-t`, `-r`, `-a` combinabili)
+- [powershell-aliases](windows/powershell-aliases/) - Alias PowerShell in stile Linux (`ll` con flag `-s`, `-t`, `-r`, `-a` combinabili) con installer
 
 ### Linux
 - (in arrivo)
