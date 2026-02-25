@@ -13,16 +13,20 @@
 .EXAMPLE
     .\win11-diagnosi.ps1
     .\win11-diagnosi.ps1 -OutputPath "C:\Reports"
+    .\win11-diagnosi.ps1 -TestLabel A
+    .\win11-diagnosi.ps1 -TestLabel B -OutputPath "C:\Reports"
 #>
 
 param(
-    [string]$OutputPath = $PSScriptRoot
+    [string]$OutputPath = $PSScriptRoot,
+    [string]$TestLabel = ""
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
 $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $hostname = $env:COMPUTERNAME
-$reportFile = Join-Path $OutputPath "diagnosi_${hostname}_${timestamp}.md"
+$labelTag = if ($TestLabel) { "_Test${TestLabel}" } else { "" }
+$reportFile = Join-Path $OutputPath "diagnosi_${hostname}${labelTag}_${timestamp}.md"
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 # Helper: format size
@@ -81,6 +85,7 @@ function Add-Line($text = "") { [void]$report.AppendLine($text) }
 Write-Host ""
 Write-Host "============================================="
 Write-Host "  DIAGNOSI SISTEMA WINDOWS 11 - PORTABILE"
+if ($TestLabel) { Write-Host "  TEST: $TestLabel" }
 Write-Host "============================================="
 Write-Host "  $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
 Write-Host "  Computer: $hostname"
@@ -90,8 +95,10 @@ Write-Host "============================================="
 Write-Host ""
 
 # --- HEADER ---
-Add-Line "# Diagnosi Sistema Windows - $hostname"
+$labelHeader = if ($TestLabel) { " - Test $TestLabel" } else { "" }
+Add-Line "# Diagnosi Sistema Windows - $hostname$labelHeader"
 Add-Line "Data: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+if ($TestLabel) { Add-Line "Test: **$TestLabel**" }
 Add-Line "Eseguito come amministratore: $isAdmin"
 Add-Line ""
 
