@@ -7,6 +7,7 @@ Script operativi per amministrazione sistemi - Soiware S.n.c.
 ### Windows
 - [Get-PendingReboot.ps1](windows/Get-PendingReboot.ps1) - Verifica se un server Windows richiede riavvio
 - [powershell-aliases](windows/powershell-aliases/) - Alias PowerShell in stile Linux (`ll` con flag `-s`, `-t`, `-r`, `-a` combinabili) con installer
+- [win11-diagnosi](windows/win11-diagnosi/) - Diagnostica completa Windows 10/11 con report Markdown per analisi AI (RAM, CPU, disco, handle leak, overlay, startup, event log)
 
 ### Linux
 - (in arrivo)
