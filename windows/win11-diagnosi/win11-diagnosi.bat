@@ -34,12 +34,24 @@ set "SCRIPT_DIR=%~dp0"
 set "TEST_LABEL="
 set /p TEST_LABEL="  Etichetta test (A, B, o invio per nessuna): "
 
+:: Ask for disk scan mode
+echo.
+echo  Scansione disco:
+echo    1 = Rapida (solo cache note, pochi secondi)
+echo    2 = Completa (tutte le cartelle + file grandi, puo' richiedere minuti)
+set "DISK_MODE=1"
+set /p DISK_MODE="  Scegli [1]: "
+
+:: Build optional arguments
+set "PS_LABEL="
+if defined TEST_LABEL set "PS_LABEL=-TestLabel %TEST_LABEL%"
+set "PS_DEEP="
+if "%DISK_MODE%"=="2" set "PS_DEEP=-DeepDiskScan"
+
+echo.
+
 :: Run the PowerShell script
-if defined TEST_LABEL (
-    powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%SCRIPT_DIR%win11-diagnosi.ps1" -OutputPath "%CD%" -TestLabel "%TEST_LABEL%"
-) else (
-    powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%SCRIPT_DIR%win11-diagnosi.ps1" -OutputPath "%CD%"
-)
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%SCRIPT_DIR%win11-diagnosi.ps1" -OutputPath "%CD%" %PS_LABEL% %PS_DEEP%
 
 set "PS_EXIT=%ERRORLEVEL%"
 echo.
