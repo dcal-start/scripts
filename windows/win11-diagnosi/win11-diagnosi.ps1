@@ -7,7 +7,7 @@
     pronto per essere sottoposto a un'AI (Claude, ChatGPT, ecc.) per valutazioni.
     Eseguire come Amministratore per risultati completi.
 .NOTES
-    Versione: 1.0
+    Versione: 1.3
     Autore: Generato con Claude Code
     Compatibilita': Windows 10/11, PowerShell 5.1+
 .EXAMPLE
@@ -15,14 +15,25 @@
     .\win11-diagnosi.ps1 -OutputPath "C:\Reports"
     .\win11-diagnosi.ps1 -TestLabel A
     .\win11-diagnosi.ps1 -TestLabel B -OutputPath "C:\Reports"
+    .\win11-diagnosi.ps1 -DeepDiskScan
 #>
 
 param(
     [string]$OutputPath = $PSScriptRoot,
-    [string]$TestLabel = ""
+    [string]$TestLabel = "",
+    [switch]$DeepDiskScan
 )
 
-$ErrorActionPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Continue'
+
+# Validate TestLabel: only alphanumeric, dash, underscore allowed
+if ($TestLabel -and $TestLabel -notmatch '^[A-Za-z0-9_-]+$') {
+    Write-Host "  [ERRORE] -TestLabel accetta solo lettere, numeri, trattino e underscore." -ForegroundColor Red
+    Write-Host "  Esempio: -TestLabel A, -TestLabel pre-reboot, -TestLabel test_1" -ForegroundColor Yellow
+    exit 1
+}
+
+$script:warningsCount = 0
 $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $hostname = $env:COMPUTERNAME
 $labelTag = if ($TestLabel) { "_Test${TestLabel}" } else { "" }
@@ -37,7 +48,7 @@ function Format-Size($bytes) {
     return "$bytes B"
 }
 
-# Helper: safe folder size (with depth limit to avoid excessive scan time)
+# Helper: safe folder size (recursive, no depth limit)
 function Get-FolderSize($path) {
     if (-not (Test-Path $path)) { return 0 }
     try {
@@ -81,6 +92,7 @@ function Write-Progress-Section($name) {
 $report = [System.Text.StringBuilder]::new()
 
 function Add-Line($text = "") { [void]$report.AppendLine($text) }
+function Escape-TableCell($text) { if ($text) { $text -replace '\|', '\|' } else { "" } }
 
 Write-Host ""
 Write-Host "============================================="
@@ -104,45 +116,51 @@ Add-Line ""
 
 # --- 1. SYSTEM INFO ---
 Write-Progress-Section "Informazioni Sistema"
-$os = Get-CimInstance Win32_OperatingSystem
-$cs = Get-CimInstance Win32_ComputerSystem
-$bios = Get-CimInstance Win32_BIOS
+$os = $null; $cs = $null; $bios = $null
+try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { $script:warningsCount++ }
+try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { $script:warningsCount++ }
+try { $bios = Get-CimInstance Win32_BIOS -ErrorAction Stop } catch { $script:warningsCount++ }
 
 Add-Line "## 1. Informazioni Sistema"
 Add-Line "| Proprieta' | Valore |"
 Add-Line "|-----------|--------|"
-Add-Line "| Computer | $($cs.Name) |"
-Add-Line "| Produttore | $($cs.Manufacturer) |"
-Add-Line "| Modello | $($cs.Model) |"
-Add-Line "| OS | $($os.Caption) $($os.Version) Build $($os.BuildNumber) |"
-Add-Line "| Architettura | $($os.OSArchitecture) |"
-Add-Line "| BIOS | $($bios.SMBIOSBIOSVersion) |"
-Add-Line "| Ultimo Boot | $($os.LastBootUpTime) |"
-Add-Line "| Uptime | $((Get-Date) - $os.LastBootUpTime) |"
+Add-Line "| Computer | $(if ($cs) { $cs.Name } else { $env:COMPUTERNAME }) |"
+Add-Line "| Produttore | $(if ($cs) { $cs.Manufacturer } else { 'N/A' }) |"
+Add-Line "| Modello | $(if ($cs) { $cs.Model } else { 'N/A' }) |"
+Add-Line "| OS | $(if ($os) { "$($os.Caption) $($os.Version) Build $($os.BuildNumber)" } else { 'N/A (accesso negato)' }) |"
+Add-Line "| Architettura | $(if ($os) { $os.OSArchitecture } else { 'N/A' }) |"
+Add-Line "| BIOS | $(if ($bios) { $bios.SMBIOSBIOSVersion } else { 'N/A' }) |"
+Add-Line "| Ultimo Boot | $(if ($os) { $os.LastBootUpTime } else { 'N/A' }) |"
+Add-Line "| Uptime | $(if ($os -and $os.LastBootUpTime) { (Get-Date) - $os.LastBootUpTime } else { 'N/A' }) |"
 Add-Line "| Utente | $($env:USERNAME) |"
 Add-Line ""
 
 # --- 2. HARDWARE ---
 Write-Progress-Section "Hardware"
-$cpu = Get-CimInstance Win32_Processor
-$gpu = Get-CimInstance Win32_VideoController
-$battery = Get-CimInstance Win32_Battery
+$cpu = $null; $gpu = $null; $battery = $null
+try { $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop } catch { $script:warningsCount++ }
+try { $gpu = Get-CimInstance Win32_VideoController -ErrorAction Stop } catch { $script:warningsCount++ }
+try { $battery = Get-CimInstance Win32_Battery -ErrorAction Stop } catch {}
 
 Add-Line "## 2. Hardware"
 Add-Line "### CPU"
 Add-Line "| Proprieta' | Valore |"
 Add-Line "|-----------|--------|"
-Add-Line "| Modello | $($cpu.Name) |"
-Add-Line "| Core | $($cpu.NumberOfCores) |"
-Add-Line "| Logical Processors | $($cpu.NumberOfLogicalProcessors) |"
-Add-Line "| Max Clock | $($cpu.MaxClockSpeed) MHz |"
-Add-Line "| Carico attuale | $($cpu.LoadPercentage)% |"
+if ($cpu) {
+    Add-Line "| Modello | $($cpu.Name) |"
+    Add-Line "| Core | $($cpu.NumberOfCores) |"
+    Add-Line "| Logical Processors | $($cpu.NumberOfLogicalProcessors) |"
+    Add-Line "| Max Clock | $($cpu.MaxClockSpeed) MHz |"
+    Add-Line "| Carico attuale | $($cpu.LoadPercentage)% |"
+} else {
+    Add-Line "| (dati non disponibili - accesso negato) | |"
+}
 Add-Line ""
 
 if ($gpu) {
     Add-Line "### GPU"
     foreach ($g in $gpu) {
-        $vramMB = [math]::Round($g.AdapterRAM / 1MB, 0)
+        $vramMB = if ($g.AdapterRAM) { [math]::Round($g.AdapterRAM / 1MB, 0) } else { 0 }
         Add-Line "- $($g.Name) (VRAM: ${vramMB} MB, Driver: $($g.DriverVersion))"
     }
     Add-Line ""
@@ -156,12 +174,18 @@ if ($battery) {
 
 # --- 3. MEMORIA ---
 Write-Progress-Section "Memoria"
-$totalRAM = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-$freeRAM = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-$usedRAM = [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / 1MB, 1)
-$pctRAM = [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize * 100, 1)
+if ($os -and $os.TotalVisibleMemorySize -gt 0) {
+    $totalRAM = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+    $freeRAM = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    $usedRAM = [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / 1MB, 1)
+    $pctRAM = [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize * 100, 1)
+} else {
+    $totalRAM = "N/A"; $freeRAM = "N/A"; $usedRAM = "N/A"; $pctRAM = "N/A"
+    $script:warningsCount++
+}
 
-$perf = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory
+$perf = $null
+try { $perf = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -ErrorAction Stop } catch { $script:warningsCount++ }
 $commitGB = if ($perf) { [math]::Round($perf.CommittedBytes / 1GB, 1) } else { "N/A" }
 $commitLimitGB = if ($perf) { [math]::Round($perf.CommitLimit / 1GB, 1) } else { "N/A" }
 $availMB = if ($perf) { $perf.AvailableMBytes } else { "N/A" }
@@ -181,7 +205,8 @@ Add-Line "| Pool Paged | $poolPaged MB |"
 Add-Line "| Pool Non-Paged | $poolNonPaged MB |"
 Add-Line ""
 
-$pf = Get-CimInstance Win32_PageFileUsage
+$pf = $null
+try { $pf = Get-CimInstance Win32_PageFileUsage -ErrorAction Stop } catch {}
 if ($pf) {
     Add-Line "### Paging File"
     foreach ($p in $pf) {
@@ -195,12 +220,19 @@ Write-Progress-Section "Dischi"
 Add-Line "## 4. Dischi"
 Add-Line "| Drive | Dimensione | Libero | Usato % |"
 Add-Line "|-------|-----------|--------|---------|"
-Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
-    $sizeGB = [math]::Round($_.Size / 1GB, 1)
-    $freeGB = [math]::Round($_.FreeSpace / 1GB, 1)
-    $usedPct = [math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 1)
-    $flag = if ($usedPct -gt 90) { " **CRITICO**" } elseif ($usedPct -gt 80) { " *ATTENZIONE*" } else { "" }
-    Add-Line "| $($_.DeviceID) | $sizeGB GB | $freeGB GB | **$usedPct%**$flag |"
+try {
+    Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction Stop | ForEach-Object {
+        if ($_.Size -and $_.Size -gt 0) {
+            $sizeGB = [math]::Round($_.Size / 1GB, 1)
+            $freeGB = [math]::Round($_.FreeSpace / 1GB, 1)
+            $usedPct = [math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 1)
+            $flag = if ($usedPct -gt 90) { " **CRITICO**" } elseif ($usedPct -gt 80) { " *ATTENZIONE*" } else { "" }
+            Add-Line "| $($_.DeviceID) | $sizeGB GB | $freeGB GB | **$usedPct%**$flag |"
+        }
+    }
+} catch {
+    Add-Line "| (dati non disponibili - accesso negato) | | | |"
+    $script:warningsCount++
 }
 Add-Line ""
 
@@ -269,20 +301,27 @@ Add-Line ""
 # --- 8. SVCHOST SERVICES ---
 Write-Progress-Section "Servizi in svchost"
 Add-Line "## 8. Servizi in svchost con handle elevati (>2000)"
-$allServices = Get-CimInstance Win32_Service
-Get-Process svchost | Where-Object { $_.HandleCount -gt 2000 } | Sort-Object HandleCount -Descending | Select-Object -First 10 | ForEach-Object {
-    $procId = $_.Id
-    $handles = $_.HandleCount
-    $ramMB = [math]::Round($_.WorkingSet64 / 1MB, 0)
-    $svcNames = ($allServices | Where-Object { $_.ProcessId -eq $procId }).DisplayName -join ", "
-    if (-not $svcNames) { $svcNames = "(non identificato)" }
-    $flag = if ($handles -gt 50000) { " **HANDLE LEAK**" } else { "" }
-    Add-Line "- **PID $procId** ($handles handles, $ramMB MB)$flag : $svcNames"
-}
-# Also flag non-svchost processes with very high handles
-Get-Process | Where-Object { $_.Name -ne "svchost" -and $_.HandleCount -gt 10000 } | Sort-Object HandleCount -Descending | ForEach-Object {
-    $svcName = ($allServices | Where-Object { $_.ProcessId -eq $_.Id }).DisplayName
-    Add-Line "- **$($_.Name) PID $($_.Id)** ($($_.HandleCount) handles, $([math]::Round($_.WorkingSet64/1MB,0)) MB) **ANOMALO** : Servizio: $svcName | Path: $($_.Path)"
+$allServices = $null
+try { $allServices = Get-CimInstance Win32_Service -ErrorAction Stop } catch { $script:warningsCount++ }
+if ($allServices) {
+    Get-Process svchost -ErrorAction SilentlyContinue | Where-Object { $_.HandleCount -gt 2000 } | Sort-Object HandleCount -Descending | Select-Object -First 10 | ForEach-Object {
+        $procId = $_.Id
+        $handles = $_.HandleCount
+        $ramMB = [math]::Round($_.WorkingSet64 / 1MB, 0)
+        $svcNames = ($allServices | Where-Object { $_.ProcessId -eq $procId }).DisplayName -join ", "
+        if (-not $svcNames) { $svcNames = "(non identificato)" }
+        $flag = if ($handles -gt 50000) { " **HANDLE LEAK**" } else { "" }
+        Add-Line "- **PID $procId** ($handles handles, $ramMB MB)$flag : $svcNames"
+    }
+    # Also flag non-svchost processes with very high handles
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne "svchost" -and $_.HandleCount -gt 10000 } | Sort-Object HandleCount -Descending | ForEach-Object {
+        $proc = $_
+        $svcName = ($allServices | Where-Object { $_.ProcessId -eq $proc.Id }).DisplayName -join ", "
+        if (-not $svcName) { $svcName = "(nessun servizio associato)" }
+        Add-Line "- **$($proc.Name) PID $($proc.Id)** ($($proc.HandleCount) handles, $([math]::Round($proc.WorkingSet64/1MB,0)) MB) **ANOMALO** : Servizio: $svcName"
+    }
+} else {
+    Add-Line "- (dati servizi non disponibili - accesso negato)"
 }
 Add-Line ""
 
@@ -291,31 +330,40 @@ Write-Progress-Section "Analisi Spazio Disco"
 Add-Line "## 9. Analisi Spazio Disco (drive sistema)"
 
 $sysDrive = $env:SystemDrive
-Add-Line "### Cartelle root $sysDrive\"
-Add-Line "| Cartella | Dimensione |"
-Add-Line "|---------|-----------|"
-Get-ChildItem "${sysDrive}\" -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
-    $size = Get-FolderSize $_.FullName
-    [PSCustomObject]@{ Folder = $_.FullName; Size = $size }
-} | Sort-Object Size -Descending | Select-Object -First 15 | Where-Object { $_.Size -gt 100MB } | ForEach-Object {
-    Add-Line "| $($_.Folder) | $(Format-Size $_.Size) |"
-}
-Add-Line ""
+if ($DeepDiskScan) {
+    Add-Line "### Cartelle root $sysDrive\"
+    Add-Line "| Cartella | Dimensione |"
+    Add-Line "|---------|-----------|"
+    Get-ChildItem "${sysDrive}\" -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 } |
+        ForEach-Object {
+        $size = Get-FolderSize $_.FullName
+        [PSCustomObject]@{ Folder = $_.FullName; Size = $size }
+    } | Sort-Object Size -Descending | Select-Object -First 15 | Where-Object { $_.Size -gt 100MB } | ForEach-Object {
+        Add-Line "| $($_.Folder) | $(Format-Size $_.Size) |"
+    }
+    Add-Line ""
 
-# User profile breakdown
-$userProfile = $env:USERPROFILE
-Add-Line "### Cartelle profilo utente ($userProfile)"
-Add-Line "| Cartella | Dimensione |"
-Add-Line "|---------|-----------|"
-Get-ChildItem $userProfile -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
-    $size = Get-FolderSize $_.FullName
-    [PSCustomObject]@{ Folder = $_.Name; Size = $size }
-} | Sort-Object Size -Descending | Select-Object -First 15 | Where-Object { $_.Size -gt 50MB } | ForEach-Object {
-    Add-Line "| $($_.Folder) | $(Format-Size $_.Size) |"
+    # User profile breakdown
+    $userProfile = $env:USERPROFILE
+    Add-Line "### Cartelle profilo utente ($userProfile)"
+    Add-Line "| Cartella | Dimensione |"
+    Add-Line "|---------|-----------|"
+    Get-ChildItem $userProfile -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 } |
+        ForEach-Object {
+        $size = Get-FolderSize $_.FullName
+        [PSCustomObject]@{ Folder = $_.Name; Size = $size }
+    } | Sort-Object Size -Descending | Select-Object -First 15 | Where-Object { $_.Size -gt 50MB } | ForEach-Object {
+        Add-Line "| $($_.Folder) | $(Format-Size $_.Size) |"
+    }
+    Add-Line ""
+} else {
+    Add-Line "*Scansione cartelle disabilitata (default). Usare -DeepDiskScan per analisi completa.*"
+    Add-Line ""
 }
-Add-Line ""
 
-# Temp, caches, reclaimable space
+# Temp, caches, reclaimable space (always run — fast, paths noti)
 Add-Line "### Spazio potenzialmente recuperabile"
 Add-Line "| Elemento | Dimensione |"
 Add-Line "|---------|-----------|"
@@ -354,19 +402,22 @@ try {
 Add-Line ""
 
 # Large files
-Add-Line "### File grandi sul disco sistema (>500 MB)"
-Add-Line "| File | Dimensione |"
-Add-Line "|------|-----------|"
-Get-ChildItem "${sysDrive}\" -Recurse -File -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.Length -gt 500MB } |
-    Sort-Object Length -Descending |
-    Select-Object -First 15 |
-    ForEach-Object {
-        $shortPath = $_.FullName
-        if ($shortPath.Length -gt 90) { $shortPath = $shortPath.Substring(0, 87) + "..." }
-        Add-Line "| ``$shortPath`` | $(Format-Size $_.Length) |"
-    }
-Add-Line ""
+if ($DeepDiskScan) {
+    Add-Line "### File grandi sul disco sistema (>500 MB)"
+    Add-Line "| File | Dimensione |"
+    Add-Line "|------|-----------|"
+    Get-ChildItem "${sysDrive}\" -Recurse -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -gt 500MB } |
+        Sort-Object Length -Descending |
+        Select-Object -First 15 |
+        ForEach-Object {
+            $shortPath = $_.FullName
+            if ($shortPath.Length -gt 90) { $shortPath = $shortPath.Substring(0, 87) + "..." }
+            Add-Line "| ``$shortPath`` | $(Format-Size $_.Length) |"
+        }
+    Add-Line ""
+}
+
 
 # --- 10. ICON OVERLAY HANDLERS ---
 Write-Progress-Section "Overlay Handlers"
@@ -432,7 +483,7 @@ if (Test-Path $hkcuRun) {
             $approvedBytes = (Get-ItemProperty $hkcuApproved -Name $name -ErrorAction SilentlyContinue).$name
             if ($approvedBytes -is [byte[]] -and $approvedBytes[0] -ne 2) { $status = "**Disabled**" }
         }
-        Add-Line "| $name | ``$cmd`` | $status |"
+        Add-Line "| $(Escape-TableCell $name) | ``$(Escape-TableCell $cmd)`` | $status |"
     }
 }
 
@@ -452,7 +503,7 @@ if (Test-Path $hklmRun) {
             $approvedBytes = (Get-ItemProperty $hklmApproved -Name $name -ErrorAction SilentlyContinue).$name
             if ($approvedBytes -is [byte[]] -and $approvedBytes[0] -ne 2) { $status = "**Disabled**" }
         }
-        Add-Line "| $name | ``$cmd`` | $status |"
+        Add-Line "| $(Escape-TableCell $name) | ``$(Escape-TableCell $cmd)`` | $status |"
     }
 }
 
@@ -469,8 +520,13 @@ Write-Progress-Section "Scheduled Tasks"
 Add-Line "## 13. Scheduled Tasks (non-Microsoft, attivi)"
 Add-Line "| Task | Percorso | Stato |"
 Add-Line "|------|---------|-------|"
-Get-ScheduledTask | Where-Object { $_.State -eq 'Ready' -and $_.TaskPath -notlike '\Microsoft\*' } | ForEach-Object {
-    Add-Line "| $($_.TaskName) | $($_.TaskPath) | $($_.State) |"
+try {
+    Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.State -eq 'Ready' -and $_.TaskPath -notlike '\Microsoft\*' } | ForEach-Object {
+        Add-Line "| $($_.TaskName) | $($_.TaskPath) | $($_.State) |"
+    }
+} catch {
+    Add-Line "| (dati non disponibili - accesso negato) | | |"
+    $script:warningsCount++
 }
 Add-Line ""
 
@@ -479,8 +535,13 @@ Write-Progress-Section "Servizi Auto non Running"
 Add-Line "## 14. Servizi Automatic non in esecuzione"
 Add-Line "| Nome | Display Name | Stato |"
 Add-Line "|------|-------------|-------|"
-Get-Service | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -ne 'Running' } | ForEach-Object {
-    Add-Line "| $($_.Name) | $($_.DisplayName) | $($_.Status) |"
+try {
+    Get-Service -ErrorAction Stop | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -ne 'Running' } | ForEach-Object {
+        Add-Line "| $($_.Name) | $($_.DisplayName) | $($_.Status) |"
+    }
+} catch {
+    Add-Line "| (dati non disponibili - accesso negato) | | |"
+    $script:warningsCount++
 }
 Add-Line ""
 
@@ -560,14 +621,24 @@ Add-Line ""
 Write-Progress-Section "Rete"
 Add-Line "## 18. Rete"
 Add-Line "### Interfacce attive"
-Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
-    Add-Line "- **$($_.Name)** ($($_.InterfaceDescription)) - Speed: $($_.LinkSpeed) - MAC: $($_.MacAddress)"
+try {
+    Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
+        Add-Line "- **$($_.Name)** ($($_.InterfaceDescription)) - Speed: $($_.LinkSpeed) - MAC: $($_.MacAddress)"
+    }
+} catch {
+    Add-Line "- (dati non disponibili - accesso negato)"
+    $script:warningsCount++
 }
 Add-Line ""
 
 Add-Line "### DNS configurato"
-Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses -and $_.AddressFamily -eq 2 } | ForEach-Object {
-    Add-Line "- $($_.InterfaceAlias): $($_.ServerAddresses -join ', ')"
+try {
+    Get-DnsClientServerAddress -ErrorAction Stop | Where-Object { $_.ServerAddresses -and $_.AddressFamily -eq 2 } | ForEach-Object {
+        Add-Line "- $($_.InterfaceAlias): $($_.ServerAddresses -join ', ')"
+    }
+} catch {
+    Add-Line "- (dati non disponibili - accesso negato)"
+    $script:warningsCount++
 }
 Add-Line ""
 
@@ -579,7 +650,7 @@ Add-Line ""
 # Auto-generated recommendations
 $recommendations = @()
 
-if ($pctRAM -gt 85) {
+if ($pctRAM -ne "N/A" -and $pctRAM -gt 85) {
     $recommendations += "- **RAM al $pctRAM%**: il sistema e' sotto pressione di memoria. Valutare chiusura processi o upgrade RAM."
 }
 if ($commitGB -ne "N/A" -and $commitLimitGB -ne "N/A") {
@@ -589,13 +660,15 @@ if ($commitGB -ne "N/A" -and $commitLimitGB -ne "N/A") {
     }
 }
 
-Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
-    $usedPct = [math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 1)
-    $freeGB = [math]::Round($_.FreeSpace / 1GB, 1)
-    if ($usedPct -gt 90) {
-        $recommendations += "- **Disco $($_.DeviceID) al $usedPct%** (solo $freeGB GB liberi): spazio critico. Liberare spazio urgentemente."
+try {
+    Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction Stop | Where-Object { $_.Size -and $_.Size -gt 0 } | ForEach-Object {
+        $usedPct = [math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 1)
+        $freeGB = [math]::Round($_.FreeSpace / 1GB, 1)
+        if ($usedPct -gt 90) {
+            $recommendations += "- **Disco $($_.DeviceID) al $usedPct%** (solo $freeGB GB liberi): spazio critico. Liberare spazio urgentemente."
+        }
     }
-}
+} catch {}
 
 if ($overlayCount -gt 11) {
     $recommendations += "- **$overlayCount icon overlay handlers**: troppi (max 11 effettivi). Rallenta explorer.exe."
@@ -605,9 +678,11 @@ if ($totalHandles -gt 300000) {
     $recommendations += "- **Handle totali: $totalHandles** - valore elevato, possibili handle leak."
 }
 
-$uptime = (Get-Date) - $os.LastBootUpTime
-if ($uptime.TotalDays -gt 7) {
-    $recommendations += "- **Uptime > 7 giorni** ($([math]::Round($uptime.TotalDays,1)) giorni): consigliato un riavvio."
+if ($os -and $os.LastBootUpTime) {
+    $uptime = (Get-Date) - $os.LastBootUpTime
+    if ($uptime.TotalDays -gt 7) {
+        $recommendations += "- **Uptime > 7 giorni** ($([math]::Round($uptime.TotalDays,1)) giorni): consigliato un riavvio."
+    }
 }
 
 $expCPU = (Get-Process explorer -ErrorAction SilentlyContinue).CPU
@@ -627,13 +702,30 @@ Add-Line "*Report generato automaticamente. Sottoporre a Claude Code o altra AI 
 
 # --- SAVE ---
 Write-Progress -Activity "Diagnosi Sistema" -Completed
-$report.ToString() | Out-File -FilePath $reportFile -Encoding UTF8
+try {
+    if (-not (Test-Path $OutputPath)) {
+        New-Item -Path $OutputPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+    }
+    $report.ToString() | Out-File -FilePath $reportFile -Encoding UTF8 -ErrorAction Stop
 
-Write-Host ""
-Write-Host "============================================="
-Write-Host "  DIAGNOSI COMPLETATA"
-Write-Host "============================================="
-Write-Host "  Report salvato in: $reportFile"
-Write-Host "  Dimensione: $([math]::Round((Get-Item $reportFile).Length/1KB,0)) KB"
-Write-Host "============================================="
-Write-Host ""
+    Write-Host ""
+    Write-Host "============================================="
+    if ($script:warningsCount -gt 0) {
+        Write-Host "  DIAGNOSI COMPLETATA (con $($script:warningsCount) warning)" -ForegroundColor Yellow
+        Write-Host "  Alcuni dati non disponibili (accesso negato)."
+        Write-Host "  Per risultati completi, eseguire come Amministratore."
+    } else {
+        Write-Host "  DIAGNOSI COMPLETATA"
+    }
+    Write-Host "============================================="
+    Write-Host "  Report salvato in: $reportFile"
+    Write-Host "  Dimensione: $([math]::Round((Get-Item $reportFile).Length/1KB,0)) KB"
+    Write-Host "============================================="
+    Write-Host ""
+    if ($script:warningsCount -gt 0) { exit 2 }
+} catch {
+    Write-Host ""
+    Write-Host "  [ERRORE] Impossibile scrivere il report: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  Path tentato: $reportFile" -ForegroundColor Red
+    exit 1
+}

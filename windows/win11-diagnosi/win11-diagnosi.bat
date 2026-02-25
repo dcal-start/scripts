@@ -30,9 +30,28 @@ if %errorlevel% neq 0 (
 :: Get the directory where this bat file is located
 set "SCRIPT_DIR=%~dp0"
 
-:: Run the PowerShell script
-powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%SCRIPT_DIR%win11-diagnosi.ps1" -OutputPath "%CD%"
+:: Ask for optional test label
+set "TEST_LABEL="
+set /p TEST_LABEL="  Etichetta test (A, B, o invio per nessuna): "
 
+:: Run the PowerShell script
+if defined TEST_LABEL (
+    powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%SCRIPT_DIR%win11-diagnosi.ps1" -OutputPath "%CD%" -TestLabel "%TEST_LABEL%"
+) else (
+    powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%SCRIPT_DIR%win11-diagnosi.ps1" -OutputPath "%CD%"
+)
+
+set "PS_EXIT=%ERRORLEVEL%"
+echo.
+if "%PS_EXIT%"=="0" (
+    echo  [OK] Diagnosi completata con successo.
+) else if "%PS_EXIT%"=="2" (
+    echo  [OK] Diagnosi completata con dati parziali.
+    echo       Per risultati completi, eseguire come Amministratore.
+) else (
+    echo  [ERRORE] Diagnosi fallita. Exit code: %PS_EXIT%
+)
 echo.
 echo  Premi un tasto per chiudere...
 pause >nul
+exit /b %PS_EXIT%
