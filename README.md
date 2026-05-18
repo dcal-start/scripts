@@ -8,6 +8,7 @@ Script operativi per amministrazione sistemi - Soiware S.n.c.
 - [Get-PendingReboot.ps1](windows/Get-PendingReboot.ps1) - Verifica se un server Windows richiede riavvio
 - [powershell-aliases](windows/powershell-aliases/) - Alias PowerShell in stile Linux (`ll` con flag `-s`, `-t`, `-r`, `-a` combinabili) con installer
 - [win11-diagnosi](windows/win11-diagnosi/) - Diagnostica completa Windows 10/11 con report Markdown per analisi AI (RAM, CPU, disco, handle leak, overlay, startup, event log)
+- [network-scanner](windows/network-scanner/) - Scanner LAN/subnet IPv4 con DNS reverse, OUI vendor lookup, export, confronto scansioni e inventario persistente
 
 ### Linux
 - (in arrivo)
@@ -59,3 +60,4 @@ Il file `.gitignore` è configurato per escludere automaticamente file potenzial
 ## Correlazione con Knowledge Base
 
 Gli script di questo repository possono essere referenziati nella [Knowledge Base](https://github.com/dcal-start/kb) quando servono come parte di procedure documentate.
+
